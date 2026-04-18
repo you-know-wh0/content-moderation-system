@@ -3,4 +3,10 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+.env
+.env.*
+!.env.example
+*.db
+*.sqlite
+*.sqlite3
 app/moderation.db

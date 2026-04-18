@@ -4,6 +4,7 @@ import logging
 import os
 import re
 import time
+import hmac
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -43,6 +44,7 @@ WHITELIST_PHRASES = tuple(
     ).split(",")
     if phrase.strip()
 )
+MODERATION_API_KEY = os.getenv("MODERATION_API_KEY", "").strip()
 
 
 if not logging.getLogger().handlers:
@@ -344,6 +346,27 @@ def get_review_store(request: Request) -> ReviewStore:
     return review_store
 
 
+def _extract_api_key(request: Request) -> str | None:
+    header_key = request.headers.get("x-api-key")
+    if header_key:
+        return header_key.strip()
+
+    authorization = request.headers.get("authorization", "")
+    if authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+
+    return None
+
+
+def require_api_key(request: Request) -> None:
+    if not MODERATION_API_KEY:
+        return
+
+    provided_key = _extract_api_key(request)
+    if not provided_key or not hmac.compare_digest(provided_key, MODERATION_API_KEY):
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+
+
 def create_app(
     service: ModerationService | None = None,
     review_store: ReviewStore | None = None,
@@ -396,12 +419,16 @@ def create_app(
         )
 
     @app.get("/analytics", response_model=AnalyticsResponse, tags=["system"])
-    def analytics(review_store: ReviewStore = Depends(get_review_store)) -> AnalyticsResponse:
+    def analytics(
+        _: None = Depends(require_api_key),
+        review_store: ReviewStore = Depends(get_review_store),
+    ) -> AnalyticsResponse:
         return AnalyticsResponse(**review_store.analytics())
 
     @app.post("/moderate", response_model=ModerationResponse, tags=["moderation"])
     def moderate(
         payload: ModerationRequest,
+        _: None = Depends(require_api_key),
         moderation_service: ModerationService = Depends(get_service),
         review_store: ReviewStore = Depends(get_review_store),
     ) -> ModerationResponse:
@@ -417,6 +444,7 @@ def create_app(
     )
     def predict(
         text: str = Query(..., min_length=1, max_length=5000),
+        _: None = Depends(require_api_key),
         moderation_service: ModerationService = Depends(get_service),
         review_store: ReviewStore = Depends(get_review_store),
     ) -> ModerationResponse:
@@ -431,6 +459,7 @@ def create_app(
     )
     def pending_reviews(
         limit: int = Query(50, ge=1, le=200),
+        _: None = Depends(require_api_key),
         review_store: ReviewStore = Depends(get_review_store),
     ) -> list[ReviewQueueItem]:
         rows = review_store.pending_reviews(limit=limit)
@@ -444,6 +473,7 @@ def create_app(
     def resolve_review(
         review_id: int,
         payload: ReviewDecisionRequest,
+        _: None = Depends(require_api_key),
         review_store: ReviewStore = Depends(get_review_store),
     ) -> ReviewQueueItem:
         row = review_store.submit_review(

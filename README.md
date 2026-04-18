@@ -181,18 +181,18 @@ You can change the project behavior with environment variables:
 - `BANNED_PHRASES`
 - `WHITELIST_PHRASES`
 - `LOG_LEVEL`
+- `MODERATION_API_KEY` (optional)
 
-## What Is moderation.db?
+If `MODERATION_API_KEY` is set, these endpoints require an API key:
 
-`app/moderation.db` is a local SQLite database file created automatically when the API starts.
+- `POST /moderate`
+- `GET /predict`
+- `GET /analytics`
+- `GET /reviews/pending`
+- `POST /reviews/{review_id}`
 
-It stores moderation history, including:
+Pass the key with either `X-API-Key` or `Authorization: Bearer <key>`.
 
-- moderated text
-- decision status (`APPROVED`, `REJECTED`, `HUMAN_REVIEW`)
-- model scores and latency
-- human-review queue and reviewer decisions
 
-If you delete this file, the app will create a new one next time it starts. Deleting it is safe, but you will lose previous moderation history and review records.
 
-## If anyone want to contribute, feel free to reach out to me! Thanks~
+If anyone has any queries about this project, feel free to reach out to me! 
